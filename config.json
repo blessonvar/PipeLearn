@@ -1,0 +1,19 @@
+{
+  "experiment_name": "test",
+  "server_address": "127.0.0.1",
+  "port": 50000,
+  "client_num": 4,
+  "model_name": "VGG5",
+  "data_size": 10000,
+  "test_data_size": 10000,
+  "epoch_num": 1,
+  "aggregation_frequency": -1,
+  "batch_size": 100,
+  "enable_val": false,
+  "enable_test": false,
+  "layer_num_on_client": 1,
+  "pipe_batch_num": 1,
+  "profile_iter_num": 0,
+  "uplink_bandwidth": 10,
+  "downlink_bandwidth": 25
+}
