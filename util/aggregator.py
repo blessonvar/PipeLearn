@@ -19,7 +19,7 @@ class Aggregator:
             self.global_models.put(model)
         self.event.clear()
 
-    def aggregate(self):
+    def aggregate(self, timing=None):
         models = []
         weights = []
         for _ in range(self.model_num):
@@ -27,7 +27,11 @@ class Aggregator:
             weight = self.weights.get()
             if weight is not None:
                 weights.append(weight)
+        if timing:
+            timing.start()
         global_model = get_average_model(models, weights)
+        if timing:
+            timing.stop()
         self.add_global_model(global_model)
 
     def get_global_model(self):

@@ -30,25 +30,26 @@ Collaborative machine learning requires a server and multiple devices. They all 
 
 Before running the code, you need to personalise the config.json file. The file is in form of JSON and the meaning of items are listed below.
 
-| Config Item  | Type     | Description |
-| ----------- | ----------- |  ----------- |
-| experiment_name  | string   | The name of this experiments, e.g. "test01".       |
-| server_address  | string | The server IP address.        |
-| port  | int | The port of server.        |
-| client_num  | int | The number of devices involved.        |
-| model_name | string | The deep learning models. Available models includes "VGG5", "VGG11", "VGG16", "ResNet18" and "ResNet50".      |
-| data_size  | int | The size of training data for each device.     |
-| test_data_size | int  | The size of test data.        |
-| epoch_num  | int | The epoch number of training.        |
-| aggregation_frequency | int   | The number of training rounds at the end of which the aggregation happens. "-1" represent aggregation happens at the end of each epoch.        |
-| batch_size | int   | The size of data batch used in each training round.      |
-| enable_val | bool   | Whether calculate validation accuracy when training.        |
-| enable_test | bool   | Whether calculate test accuracy at the end of training.    |
-| layer_num_on_client | int   | How many layers deployed at the device side.       |
-| pipe_batch_num | int   | How many batches are used in parallel in each training round.        |
-| profile_iter_num | int   | How many training iteration the profiler takes to determine layer_num_on_client and pipe_batch_num. Set it to 0 to disable the profiler.     |
-| uplink_bandwidth | int   | The uplink network bandwidth (Mbps).        |
-| downlink_bandwidth | int   | The downlink network bandwidth (Mbps).         |
+| Config Item           | Type   | Description                                                                                                                              |
+|-----------------------|--------|------------------------------------------------------------------------------------------------------------------------------------------|
+| experiment_name       | string | The name of this experiments, e.g. "test01".                                                                                             |
+| server_address        | string | The server IP address.                                                                                                                   |
+| port                  | int    | The port of server.                                                                                                                      |
+| client_num            | int    | The number of devices involved.                                                                                                          |
+| dataset_name          | string | The dataset on which the model is trained. Available datasets include "CIFAR-10", "MNIST" and "SVHN".                                    |
+| model_name            | string | The deep learning models. Available models include "VGG5", "VGG11", "VGG16", "ResNet18", "ResNet50", "MobileNetSmall", "MobileNetLarge". |
+| data_size             | int    | The size of training data for each device.                                                                                               |
+| test_data_size        | int    | The size of test data.                                                                                                                   |
+| epoch_num             | int    | The epoch number of training.                                                                                                            |
+| aggregation_frequency | int    | The number of training rounds at the end of which the aggregation happens. "-1" represent aggregation happens at the end of each epoch.  |
+| batch_size            | int    | The size of data batch used in each training round.                                                                                      |
+| enable_val            | bool   | Whether calculate validation accuracy when training.                                                                                     |
+| enable_test           | bool   | Whether calculate test accuracy at the end of training.                                                                                  |
+| layer_num_on_client   | int    | How many layers deployed at the device side.                                                                                             |
+| pipe_batch_num        | int    | How many batches are used in parallel in each training round.                                                                            |
+| profile_iter_num      | int    | How many training iteration the profiler takes to determine layer_num_on_client and pipe_batch_num. Set it to 0 to disable the profiler. |
+| uplink_bandwidth      | int    | The uplink network bandwidth (Mbps).                                                                                                     |
+| downlink_bandwidth    | int    | The downlink network bandwidth (Mbps).                                                                                                   |
 
 ### Running the Code
 

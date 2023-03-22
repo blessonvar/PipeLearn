@@ -88,9 +88,9 @@ def recommend_parameter(client_profile_res, server_profile_res, uplink_bandwidth
                 uplink_bandwidth * 1024 * 1024)
         downloading_time = [layer['output_size'] for layer in server_profile_res][split_point - 1] * 8 / (
                 downlink_bandwidth * 1024 * 1024)
-        batch_num = math.ceil((uploading_time + server_forward + server_backward + downloading_time) /
-                              min(client_forward, client_backward)) + 1
-        batch_num = min(min(batch_num, batch_size), 100)
+        batch_num = max(0, math.ceil((uploading_time + server_forward + server_backward + downloading_time) /
+                                     (min(client_forward, client_backward) + 1e-8))) + 1
+        batch_num = min(min(batch_num, batch_size // 2), 100)
         batch_num = batch_size // (batch_size // batch_num)
         # print("split point: {}\nbatch_num: {}\nclient_forward: {}\nclient_backward: {}\n"
         #       "server_forward: {}\nserver_backward: {}\nupload: {}\ndownload: {}\n".format(

@@ -3,6 +3,7 @@
   "server_address": "127.0.0.1",
   "port": 50000,
   "client_num": 4,
+  "dataset_name": "CIFAR-10",
   "model_name": "VGG5",
   "data_size": 10000,
   "test_data_size": 10000,

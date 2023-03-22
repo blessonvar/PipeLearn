@@ -5,6 +5,7 @@ import os
 from threading import Thread
 
 import torch
+from torch.autograd.profiler import profile as torch_profile
 
 import config
 from node.client import Client
@@ -50,33 +51,42 @@ def run_a_client(client_config):
     client.receive_model()
     client.receive_sync_flag()
     # Train.
-    client.client_timing.start()
-    # Async communication setup.
-    comm = None
-    comm_thread = None
-    comm_thread2 = None
-    if client.config.ASYNC_COMM:
-        comm = Communication(client.socket,
-                             half_duplex=client.config.HALF_DUPLEX,
-                             time_difference=client.config.TIME_DIFFERENCE)
-        comm_thread = Thread(target=comm.run, kwargs={'is_send': True})
-        comm_thread.start()
-        if not client.config.HALF_DUPLEX:
-            comm_thread2 = Thread(target=comm.run, kwargs={'is_send': False})
-            comm_thread2.start()
-    # Train by epochs.
-    for epoch_index in range(client.config.EPOCH_NUM):
-        train_data_loader = get_data_loader(client.config, set_name='train')
-        val_data_loader = get_data_loader(client.config, set_name='val')
-        client.train([train_data_loader, val_data_loader], epoch_index, comm)
-    if client.config.ASYNC_COMM:
-        comm.send(Message(title="CLOSE_COMMUNICATION_CHANNEL", close_comm=True))
-        comm_thread.join()
-        if not client.config.HALF_DUPLEX:
-            comm.receive(expected_title="CLOSE_COMMUNICATION_CHANNEL")
-            comm_thread2.join()
-        client.communication_amount['TRAINING'] = comm.amount
-    client.client_timing.stop()
+    with torch_profile(enabled=client.config.ENABLE_PROFILER) as prof:
+        client.client_timing.start()
+        # Async communication setup.
+        comm = None
+        comm_thread = None
+        comm_thread2 = None
+        if client.config.ASYNC_COMM:
+            comm = Communication(client.socket,
+                                 half_duplex=client.config.HALF_DUPLEX,
+                                 time_difference=client.config.TIME_DIFFERENCE)
+            comm_thread = Thread(target=comm.run, kwargs={'is_send': True})
+            comm_thread.start()
+            if not client.config.HALF_DUPLEX:
+                comm_thread2 = Thread(target=comm.run, kwargs={'is_send': False})
+                comm_thread2.start()
+        # Train by epochs.
+        for epoch_index in range(client.config.EPOCH_NUM):
+            train_data_loader = get_data_loader(client.config, set_name='train')
+            val_data_loader = get_data_loader(client.config, set_name='val')
+            client.train([train_data_loader, val_data_loader], epoch_index, comm)
+        if client.config.ASYNC_COMM:
+            comm.send(Message(title="CLOSE_COMMUNICATION_CHANNEL", close_comm=True))
+            comm_thread.join()
+            if not client.config.HALF_DUPLEX:
+                comm.receive(expected_title="CLOSE_COMMUNICATION_CHANNEL")
+                comm_thread2.join()
+            client.communication_amount['TRAINING'] = comm.amount
+        client.client_timing.stop()
+    if client.config.ENABLE_PROFILER:
+        print(prof.key_averages().table(sort_by="cpu_time_total"))
+        if not os.path.exists(client.config.PROFILE_DIR):
+            os.mkdir(client.config.PROFILE_DIR)
+        profile_file = os.path.join(
+            client.config.PROFILE_DIR,
+            '{}_client_{}_trace.json'.format(client.config.EXPERIMENT_NAME, client.config.CLIENT_INDEX))
+        prof.export_chrome_trace(profile_file)
     # Test.
     if client.config.ENABLE_TEST:
         test_data_loader = get_data_loader(client.config, set_name='test')

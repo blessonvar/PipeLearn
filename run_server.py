@@ -41,6 +41,7 @@ def run(server_config=None):
         )
     server = Server(server_config)
     server.run()
+    return
 
 
 if __name__ == '__main__':

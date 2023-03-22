@@ -81,8 +81,9 @@ class ServerReplica:
             self.loss = message.content
             # Client model aggregation.
             if (iter_index + 1) % self.config.AGGREGATION_FREQ == 0 and self.config.CLIENT_NUM > 1:
+                aggregate_timing = self.server_timing.break_down('aggregate', epoch_index, iter_index)
                 self.receive_client_params(epoch_index, iter_index)
-                self.global_client_model = self.aggregation(self.global_client_model, aggregator)
+                self.global_client_model = self.aggregation(self.global_client_model, aggregator, aggregate_timing)
                 self.send_client_params()
             iter_index += 1
             idle_timing = self.server_timing.break_down('idle', epoch_index, iter_index)
@@ -92,15 +93,15 @@ class ServerReplica:
         message = Message(from_socket=self.client_socket,
                           expected_title='MSG_LOCAL_TRAIN_LOSS_CLIENT_{}_TO_SERVER'.format(self.client_index))
         train_loss, train_acc = message.content
-        self.train_loss.append(train_loss)
-        self.train_acc.append(train_acc)
+        self.train_loss.append(round(train_loss, 2))
+        self.train_acc.append(round(train_acc, 2))
         # val
         if self.config.ENABLE_VAL:
             message = Message(from_socket=self.client_socket,
                               expected_title='MSG_LOCAL_VAL_LOSS_CLIENT_{}_TO_SERVER'.format(self.client_index))
             val_loss, val_acc = message.content
-            self.val_loss.append(val_loss)
-            self.val_acc.append(val_acc)
+            self.val_loss.append(round(val_loss, 2))
+            self.val_acc.append(round(val_acc, 2))
 
     def train_on_server(self, epoch_index, aggregator):
         # train
@@ -148,7 +149,8 @@ class ServerReplica:
             update_timing.stop()
             # Server model aggregation.
             if (iter_index + 1) % self.config.AGGREGATION_FREQ == 0 and self.config.CLIENT_NUM > 1:
-                self.global_server_model = self.aggregation(self.net.state_dict(), aggregator)
+                aggregate_timing = self.server_timing.break_down('aggregate', epoch_index, iter_index)
+                self.global_server_model = self.aggregation(self.net.state_dict(), aggregator, aggregate_timing)
                 self.net.load_state_dict(self.global_server_model)
             iter_index += 1
             idle_timing = self.client_timing.break_down('idle', epoch_index, iter_index)
@@ -156,9 +158,9 @@ class ServerReplica:
             iter_timing.stop()
         idle_timing.stop()
         train_loss /= iter_index
-        self.train_loss.append(train_loss)
+        self.train_loss.append(round(train_loss, 2))
         train_accuracy = 100. * correct / total
-        self.train_acc.append(train_accuracy)
+        self.train_acc.append(round(train_accuracy, 2))
         # val
         if self.config.ENABLE_VAL:
             self.net.eval()
@@ -185,9 +187,9 @@ class ServerReplica:
                     correct += predicted.eq(targets).sum().item()
                     iter_index += 1
             val_loss /= iter_index
-            self.val_loss.append(val_loss)
+            self.val_loss.append(round(val_loss, 2))
             val_accuracy = 100. * correct / total
-            self.val_acc.append(val_accuracy)
+            self.val_acc.append(round(val_accuracy, 2))
 
     def train_split(self, epoch_index, aggregator, comm):
         # train
@@ -276,22 +278,23 @@ class ServerReplica:
                 update_timing.stop()
             # Model aggregation.
             if (iter_index + 1) % self.config.AGGREGATION_FREQ == 0 and self.config.CLIENT_NUM > 1:
+                aggregate_timing = self.server_timing.break_down('aggregate', epoch_index, iter_index)
                 if self.complete_net is None:
                     self.complete_net = get_net(self.config, "complete")
                     self.global_model = self.complete_net.state_dict()
                 self.global_server_model = self.net.state_dict()
                 self.receive_client_params(epoch_index, iter_index, comm)
                 self.merge_models()
-                self.global_model = self.aggregation(self.global_model, aggregator)
+                self.global_model = self.aggregation(self.global_model, aggregator, aggregate_timing)
                 self.split_models()
                 self.send_client_params(comm)
                 self.net.load_state_dict(self.global_server_model)
             iter_index += 1
             iter_timing.stop()
         train_loss /= iter_index
-        self.train_loss.append(train_loss)
+        self.train_loss.append(round(train_loss, 2))
         train_acc = 100. * correct / total
-        self.train_acc.append(train_acc)
+        self.train_acc.append(round(train_acc, 2))
         # val
         if self.config.ENABLE_VAL:
             self.net.eval()
@@ -322,14 +325,14 @@ class ServerReplica:
                     correct += predicted.eq(targets).sum().item()
                     iter_index += 1
             val_loss /= iter_index
-            self.val_loss.append(val_loss)
+            self.val_loss.append(round(val_loss, 2))
             val_acc = 100. * correct / total
-            self.val_acc.append(val_acc)
+            self.val_acc.append(round(val_acc, 2))
 
-    def aggregation(self, model, aggregator):
+    def aggregation(self, model, aggregator, timing=None):
         aggregator.add_model(model)
         if self.client_index == 0:
-            aggregator.aggregate()
+            aggregator.aggregate(timing)
         global_model = aggregator.get_global_model()
         aggregator.task_done()
         return global_model

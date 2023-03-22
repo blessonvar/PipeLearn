@@ -23,7 +23,8 @@ class VGG(Network):
 
 class Convolutional(nn.Module):
     def __init__(self, in_channel_num=None, out_channel_num=None, kernel_size=None, padding=1, stride=1,
-                 bias=True, pool_type=None, pool_kernel_size=None, pool_stride=None, pool_padding=0):
+                 bias=True, pool_type=None, pool_kernel_size=None, pool_stride=None, pool_padding=0,
+                 non_linear=nn.ReLU):
         super(Convolutional, self).__init__()
         self.in_channel_num = in_channel_num
         self.out_channel_num = out_channel_num
@@ -38,7 +39,7 @@ class Convolutional(nn.Module):
                               stride=self.stride,
                               bias=self.bias)
         self.bn = nn.BatchNorm2d(self.out_channel_num)
-        self.relu = nn.ReLU(inplace=True)
+        self.nl = non_linear(inplace=True)
         if pool_type == 'maxpool':
             self.pool = nn.MaxPool2d(kernel_size=pool_kernel_size, stride=pool_stride, padding=pool_padding)
         elif pool_type == 'avgpool':
@@ -49,7 +50,7 @@ class Convolutional(nn.Module):
     def forward(self, x):
         out = self.conv(x)
         out = self.bn(out)
-        out = self.relu(out)
+        out = self.nl(out)
         if self.pool:
             out = self.pool(out)
         return out

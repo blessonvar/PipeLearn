@@ -3,6 +3,7 @@ import time
 from functools import reduce
 from networks.vgg import Convolutional, Dense
 from networks.resnet import ResBasicBlock, ResBottleneck
+from networks.mobilenet import MobileBottleneck
 
 
 class Profiling(object):
@@ -16,7 +17,8 @@ class Profiling(object):
         self.origin_call = {}
         self.hook_done = False
         self.layer_num = 0
-        self.instances = [torch.nn.Container, torch.nn.Sequential, Convolutional, Dense, ResBasicBlock, ResBottleneck]
+        self.instances = [torch.nn.Container, torch.nn.Sequential, Convolutional,
+                          Dense, ResBasicBlock, ResBottleneck, MobileBottleneck]
         self.split_points = []
 
     def __enter__(self):

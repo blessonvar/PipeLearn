@@ -7,12 +7,13 @@ from threading import Thread
 import torch
 import tqdm
 from torch.multiprocessing import Process, Queue
+from torch.autograd.profiler import profile as torch_profile
 
 from util.aggregator import Aggregator
 from util.communication import Communication
 from util.profile import recommend_parameter
 from util.message import Message
-from util.util import draw_timeline, get_net, save_result, save_stats_csv
+from util.util import draw_timeline, get_net, print_log, save_result, save_stats_csv
 from node.node import Node
 from node.server_replica import ServerReplica
 
@@ -55,13 +56,14 @@ class Server(Node):
         self.communication_amount['TOTAL'] = sum(self.communication_amount.values())
         test_accuracy /= len(self.stats)
         training_time = self.stats[0]["training_time"]["server"]["total"]
+        print_log(self.config, test_accuracy, training_time, self.communication_amount, split_points, parallel_batch_nums)
         # Save results.
         if not os.path.exists(self.config.RESULT_DIR):
             os.mkdir(self.config.RESULT_DIR)
         with open(self.config.RESULT_TXT_ADDRESS, 'a+') as f:
             save_result(
                 self.config, f, test_accuracy, training_time, self.communication_amount, split_points, parallel_batch_nums)
-        logging.info("Result saved in {}".format(self.config.RESULT_TXT_ADDRESS))
+        return
 
     def connect(self):
         logger.info("Waiting Incoming Connections.")
@@ -128,7 +130,9 @@ class Server(Node):
         else:
             torch.set_num_threads(1)
         # profile
+        profiling_time = 0
         if run_profiler:
+            profiler_start_time = time.time()
             server_replica.profile()
             server_replica.receive_client_profile_res()
             split_point, batch_num = recommend_parameter(
@@ -138,6 +142,9 @@ class Server(Node):
             server_replica.config.LAYER_NUM_ON_CLIENT = split_point
             server_replica.config.PIPE_BATCH_NUM = batch_num
             server_replica.send_recommend_parameters()
+            profiling_time = time.time() - profiler_start_time
+            print(profiling_time)
+            print("Split point: {}; Pipe batch num: {}".format(split_point, batch_num))
         server_net = get_net(server_replica.config, model_type="server")
         client_net = get_net(server_replica.config, model_type="client")
         server_replica.update_net(server_net)
@@ -152,37 +159,46 @@ class Server(Node):
         server_replica.send_sync_flag()
         # Train.
         logger.info("Start training...")
-        server_replica.server_timing.start()
-        bar = tqdm.trange(self.config.EPOCH_NUM)
-        comm = None
-        comm_thread = None
-        comm_thread2 = None
-        if server_replica.config.ASYNC_COMM:
-            comm = Communication(server_replica.client_socket,
-                                 half_duplex=server_replica.config.HALF_DUPLEX,
-                                 time_difference=server_replica.config.TIME_DIFFERENCE)
-            comm_thread = Thread(target=comm.run, kwargs={'is_send': False})
-            comm_thread.start()
-            if not server_replica.config.HALF_DUPLEX:
-                comm_thread2 = Thread(target=comm.run, kwargs={'is_send': True})
-                comm_thread2.start()
-        loss_values = []
-        for epoch_index in bar:
-            epoch_start_time = time.time()
-            bar.set_description("Training: ")
-            server_replica.train(epoch_index, aggregator, comm)
-            bar.set_postfix({'training loss': "{:.2f}".format(server_replica.loss),
-                             'time': "{:.2f}".format(time.time() - epoch_start_time)})
-            loss_values.append(server_replica.loss)
-        if server_replica.config.ASYNC_COMM:
-            comm.receive(expected_title="CLOSE_COMMUNICATION_CHANNEL")
-            comm_thread.join()
-            if not server_replica.config.HALF_DUPLEX:
-                comm.send(Message(title="CLOSE_COMMUNICATION_CHANNEL", close_comm=True))
-                comm_thread2.join()
-            server_replica.server_communication_amount["TRAINING"] = comm.amount
-        server_replica.server_timing.stop()
+        with torch_profile(enabled=server_replica.config.ENABLE_PROFILER) as prof:
+            server_replica.server_timing.start()
+            bar = tqdm.trange(self.config.EPOCH_NUM)
+            comm = None
+            comm_thread = None
+            comm_thread2 = None
+            if server_replica.config.ASYNC_COMM:
+                comm = Communication(server_replica.client_socket,
+                                     half_duplex=server_replica.config.HALF_DUPLEX,
+                                     time_difference=server_replica.config.TIME_DIFFERENCE)
+                comm_thread = Thread(target=comm.run, kwargs={'is_send': False})
+                comm_thread.start()
+                if not server_replica.config.HALF_DUPLEX:
+                    comm_thread2 = Thread(target=comm.run, kwargs={'is_send': True})
+                    comm_thread2.start()
+            loss_values = []
+            for epoch_index in bar:
+                epoch_start_time = time.time()
+                bar.set_description("Training: ")
+                server_replica.train(epoch_index, aggregator, comm)
+                bar.set_postfix({'training loss': "{:.2f}".format(server_replica.loss),
+                                 'time': "{:.2f}".format(time.time() - epoch_start_time)})
+                loss_values.append(server_replica.loss)
+            if server_replica.config.ASYNC_COMM:
+                comm.receive(expected_title="CLOSE_COMMUNICATION_CHANNEL")
+                comm_thread.join()
+                if not server_replica.config.HALF_DUPLEX:
+                    comm.send(Message(title="CLOSE_COMMUNICATION_CHANNEL", close_comm=True))
+                    comm_thread2.join()
+                server_replica.server_communication_amount["TRAINING"] = comm.amount
+            server_replica.server_timing.stop()
         logger.info("Training done.")
+        if server_replica.config.ENABLE_PROFILER:
+            print(prof.key_averages().table(sort_by="cpu_time_total"))
+            if not os.path.exists(server_replica.config.PROFILE_DIR):
+                os.mkdir(server_replica.config.PROFILE_DIR)
+            profile_file = os.path.join(
+                server_replica.config.PROFILE_DIR,
+                '{}_server_{}_trace.json'.format(server_replica.config.EXPERIMENT_NAME, server_replica.client_index))
+            prof.export_chrome_trace(profile_file)
         # Test.
         if self.config.ENABLE_TEST:
             logger.info("Start testing...")
@@ -202,16 +218,16 @@ class Server(Node):
             os.mkdir(server_replica.config.RESULT_DIR)
         if not os.path.exists(server_replica.config.FIG_DIR):
             os.mkdir(server_replica.config.FIG_DIR)
-        fig_save_address = server_replica.config.EXPERIMENT_NAME + "_client_{}".format(server_replica.client_index)
-        draw_timeline(
-            start_iter=0,
-            end_iter=5,
-            server_timing=server_replica.server_timing,
-            client_timing=server_replica.client_timing,
-            time_difference=server_replica.config.TIME_DIFFERENCE,
-            save_address=os.path.join(server_replica.config.FIG_DIR, fig_save_address),
-            show=False
-        )
+        # fig_save_address = server_replica.config.EXPERIMENT_NAME + "_client_{}".format(server_replica.client_index)
+        # draw_timeline(
+        #     start_iter=0,
+        #     end_iter=5,
+        #     server_timing=server_replica.server_timing,
+        #     client_timing=server_replica.client_timing,
+        #     time_difference=server_replica.config.TIME_DIFFERENCE,
+        #     save_address=os.path.join(server_replica.config.FIG_DIR, fig_save_address),
+        #     show=False
+        # )
         stat = {
             "experiment_name": server_replica.config.EXPERIMENT_NAME,
             "client_index": server_replica.client_index,
@@ -221,6 +237,7 @@ class Server(Node):
                     "forward": round(server_replica.server_timing.accumulate("forward"), 2),
                     "backward": round(server_replica.server_timing.accumulate("backward"), 2),
                     "update": round(server_replica.server_timing.accumulate("update"), 2),
+                    "aggregate": round(server_replica.server_timing.accumulate("aggregate"), 2),
                     "idle": round(server_replica.server_timing.accumulate("idle"), 2),
                 },
                 "client": {
@@ -242,13 +259,19 @@ class Server(Node):
             "val_loss": server_replica.val_loss,
             "val_acc": server_replica.val_acc,
             "split_point": server_replica.config.LAYER_NUM_ON_CLIENT,
-            "parallel_batch_num": server_replica.config.PIPE_BATCH_NUM
+            "parallel_batch_num": server_replica.config.PIPE_BATCH_NUM,
+            "profiling_time": profiling_time
         }
         print(stat)
         save_stats_csv(stat, server_replica.config.RESULT_CSV_ADDRESS)
+        del stat["train_loss"]
+        del stat["train_acc"]
+        del stat["val_loss"]
+        del stat["val_acc"]
         stats.put(stat)
         # Ending.
         while not (stats.full() and stats.full() and stats.full() and stats.full()):
             time.sleep(0.1)
         server_replica.send_sync_flag()
         server_replica.server_socket.close()
+        return

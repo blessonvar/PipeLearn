@@ -10,6 +10,7 @@ import torchvision.transforms as transforms
 from torch.utils.data import DataLoader, Subset, random_split
 from networks.vgg import VGG
 from networks.resnet import ResNet
+from networks.mobilenet import MobileNet
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -25,6 +26,8 @@ def get_net(config, model_type="server"):
         net = VGG(config, model_type)
     elif config.MODEL_NAME.startswith("ResNet"):
         net = ResNet(config, model_type)
+    elif config.MODEL_NAME.startswith("MobileNet"):
+        net = MobileNet(config, model_type)
     else:
         raise Exception("Undefined Neural Network.")
     logger.debug(str(net))
@@ -51,18 +54,34 @@ def get_data_loader(config, set_name='train'):
             transforms.RandomCrop(config.INPUT_IMAGE_SIZE, padding=4),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
-            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
+            transforms.Normalize(config.DATASET_MEAN, config.DATASET_STD)
         ])
         shuffle = True
     else:
         transform = transforms.Compose([
             transforms.Resize(config.INPUT_IMAGE_SIZE),
             transforms.ToTensor(),
-            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
+            transforms.Normalize(config.DATASET_MEAN, config.DATASET_STD)
         ])
         shuffle = False
-    dataset = torchvision.datasets.CIFAR10(
-        root=data_path, train=set_name == 'train', download=download, transform=transform)
+    if config.DATASET_NAME == "CIFAR-10":
+        dataset = torchvision.datasets.CIFAR10(
+            root=data_path, train=set_name == 'train', download=download, transform=transform)
+    elif config.DATASET_NAME == "CIFAR-100":
+        dataset = torchvision.datasets.CIFAR100(
+            root=data_path, train=set_name == 'train', download=download, transform=transform)
+    elif config.DATASET_NAME == "MNIST":
+        dataset = torchvision.datasets.MNIST(
+            root=data_path, train=set_name == 'train', download=download, transform=transform)
+    elif config.DATASET_NAME == "SVHN":
+        split = 'train' if set_name == 'train' else 'test'
+        dataset = torchvision.datasets.SVHN(
+            root=data_path, split=split, download=download, transform=transform)
+    elif config.DATASET_NAME == "ImageNet":
+        dataset = torchvision.datasets.ImageNet(
+            root=data_path, train=set_name == 'train', download=None, transform=transform)
+    else:
+        raise Exception("Data Source Not Found.")
     subset = Subset(dataset, local_data_indices)
     if set_name == 'train':
         train_data_loader = DataLoader(subset, batch_size=config.BATCH_SIZE, shuffle=shuffle)
@@ -249,7 +268,8 @@ def save_stats_csv(stat, file_name):
         "train_loss": str(stat["train_loss"]),
         "train_acc": str(stat["train_acc"]),
         "val_loss": str(stat["val_loss"]),
-        "val_acc": str(stat["val_acc"])
+        "val_acc": str(stat["val_acc"]),
+        "aggregate": stat["training_time"]["server"]["aggregate"]
     }
     result_df = pd.DataFrame(result_dict, index=[0])
     if os.path.exists(file_name):
