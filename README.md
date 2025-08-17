@@ -77,4 +77,4 @@ The results, including model accuracy, training time, idle time, etc., are saved
 
 ## Citation
 
-TBD
+Zihan Zhang, Philip Rodgers, Peter Kilpatrick, Ivor Spence, Blesson Varghese. 2024. “PiPar: Pipeline Parallelism for Collaborative Machine Learning.” Journal of Parallel and Distributed Computing, Vol. 193, Article 104947.
