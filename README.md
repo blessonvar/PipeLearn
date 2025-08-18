@@ -78,3 +78,15 @@ The results, including model accuracy, training time, idle time, etc., are saved
 ## Citation
 
 Zihan Zhang, Philip Rodgers, Peter Kilpatrick, Ivor Spence, Blesson Varghese. 2024. “PiPar: Pipeline Parallelism for Collaborative Machine Learning.” Journal of Parallel and Distributed Computing, Vol. 193, Article 104947.
+
+```
+@article{zhang2024pipar,
+  title         = {PiPar: Pipeline parallelism for collaborative machine learning},
+  author        = {Zhang, Zihan and Rodgers, Philip and Kilpatrick, Peter and Spence, Ivor and Varghese, Blesson},
+  journal       = {Journal of Parallel and Distributed Computing},
+  year          = {2024},
+  volume        = {193},
+  pages         = {104947},
+  url           = {https://www.sciencedirect.com/science/article/pii/S0743731524001114}
+}
+```
